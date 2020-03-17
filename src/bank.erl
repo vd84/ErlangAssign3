@@ -32,42 +32,41 @@ handle_call({balance, Name}, _From, State = #state{db = Db}) ->
              end,
   {reply, Response, State#state{db = Db}, {continue, {balance, Name}}};
 handle_call({deposit, {Name, Amount}}, _From,  State = #state{db = Db}) ->
-  Response = case maps:find(Name, Db) of
+  {Response, ReturnDb} = case maps:find(Name, Db) of
                error ->
                  NewDb = Db#{Name => Amount},
-                 {ok, Amount};
+                 {{ok, Amount}, NewDb};
                {ok, Balance} ->
                  NewDb = Db#{Name => Amount + Balance},
-                 {ok, Amount + Balance}
-             end, {reply, Response, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}};
+                 {{ok, Amount + Balance}, NewDb}
+             end, {reply, Response, State#state{db = ReturnDb}, {continue, {deposit, Name, Amount}}};
 handle_call({withdraw, {Name, Amount}}, _From, State = #state{db = Db}) ->
-  NewDb = Db,
-  Response = case maps:find(Name, Db) of
+  {Response, ReturnDb} = case maps:find(Name, Db) of
                error ->
-                 no_account;
+                 {no_account, Db};
                {ok, Balance} ->
                  case (Amount - Balance) < 0 of
                    true ->
-                     insufficient_funds;
+                     {insufficient_funds, Db};
                    false ->
                      NewDb = Db#{Name => Balance - Amount},
-                     {ok, Amount + Balance}
+                     {{ok, Amount + Balance}, NewDb}
                  end
-             end, {reply, Response, State#state{db = NewDb}, {continue, {withdraw, Name, Amount}}};
+             end, {reply, Response, State#state{db = ReturnDb}, {continue, {withdraw, Name, Amount}}};
 
 handle_call({lend, {From, To, Amount}}, _From, State = #state{db = Db}) ->
-  {Response, Db} = case maps:find(From, Db) of
+  {Response, ReturnDb} = case maps:find(From, Db) of
                error ->
                  {no_account, From};
                {ok, FromBalance} ->
                  case maps:find(To, Db) of
                    error ->
-                     {no_account, To};
+                     {{no_account, To}, Db};
 
                    {ok, ToBalance} ->
                      case (FromBalance - Amount) < 0 of
                        true ->
-                         insufficient_funds;
+                         {insufficient_funds,Db};
                        false ->
                          NewDb = Db#{To => ToBalance + Amount},
                          NewDb2 = NewDb#{From => FromBalance - Amount},
@@ -75,7 +74,7 @@ handle_call({lend, {From, To, Amount}}, _From, State = #state{db = Db}) ->
                      end
                  end
 
-             end, {reply, Response, State#state{db = Db}, {continue, {lend, From, To, Amount}}}.
+             end, {reply, Response, State#state{db = ReturnDb}, {continue, {lend, From, To, Amount}}}.
 
 
 
