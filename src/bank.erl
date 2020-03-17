@@ -14,7 +14,7 @@
 
 
 %% API
--export([init/1, handle_call/3, handle_cast/2, server/0, balance/2, deposit/3, handle_continue/2, handle_info/2, withdraw/3, lend/4]).
+-export([init/1, handle_call/3, server/0, balance/2, deposit/3, handle_continue/2, handle_info/2, withdraw/3, lend/4]).
 
 server() ->
   gen_server:start(?MODULE, [], []).
@@ -33,7 +33,7 @@ handle_call({balance, Name}, _From, State = #state{db = Db, num_requests = NumRe
   {reply, Response, State#state{db = Db, num_requests = NumReq + 1}, {continue, {balance, Name}}};
 handle_call(num_requests, _From, State = #state{num_requests = NumReq}) ->
   {reply, NumReq, State}.
-handle_cast({deposit, {Name, Amount}}, State = #state{db = Db}) ->
+handle_call({deposit, {Name, Amount}}, State = #state{db = Db}) ->
   case maps:find(Name, Db) of
     error ->
       NewDb = Db#{Name => Amount},
@@ -42,7 +42,7 @@ handle_cast({deposit, {Name, Amount}}, State = #state{db = Db}) ->
       NewDb = Db#{Name => Amount + Balance},
       {ok, Amount + Balance}
   end, {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}};
-handle_cast({withdraw, {Name, Amount}}, State = #state{db = Db}) ->
+handle_call({withdraw, {Name, Amount}}, State = #state{db = Db}) ->
   case maps:find(Name, Db) of
     error ->
       no_account;
@@ -58,7 +58,7 @@ handle_cast({withdraw, {Name, Amount}}, State = #state{db = Db}) ->
       end
   end;
 
-handle_cast({lend, {From, To, Amount}}, State = #state{db = Db}) ->
+handle_call({lend, {From, To, Amount}}, State = #state{db = Db}) ->
   case maps:find(From, Db) of
     error ->
       {no_account, From};
@@ -108,10 +108,10 @@ balance(Bank, Name) when is_pid(Bank) ->
   gen_server:call(Bank, {balance, Name}).
 
 deposit(Bank, Name, Amount) when is_pid(Bank) ->
-  gen_server:cast(Bank, {deposit, {Name, Amount}}).
+  gen_server:call(Bank, {deposit, {Name, Amount}}).
 withdraw(Bank, Name, Amount) when is_pid(Bank) ->
-  gen_server:cast(Bank, {withdraw, {Name, Amount}}).
+  gen_server:call(Bank, {withdraw, {Name, Amount}}).
 lend(Bank, From, To, Amount) when is_pid(Bank) ->
-  gen_server:cast(Bank, {lend, {From, To, Amount}}).
+  gen_server:call(Bank, {lend, {From, To, Amount}}).
 
 
