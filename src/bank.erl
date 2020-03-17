@@ -14,7 +14,7 @@
 
 
 %% API
--export([init/1, handle_call/3, handle_cast/2, server/0, balance/2, deposit/3, handle_continue/2, handle_info/2]).
+-export([init/1, handle_call/3, handle_cast/2, server/0, balance/2, deposit/3, handle_continue/2, handle_info/2, withdraw/3, lend/4]).
 
 server() ->
   gen_server:start(?MODULE, [], []).
@@ -26,7 +26,7 @@ init(_Args) ->
 handle_call({balance, Name}, _From, State = #state{db = Db, num_requests = NumReq}) ->
   Response = case maps:find(Name, Db) of
                error ->
-                 not_found;
+                 no_account;
                {ok, Balance} ->
                  {ok, Balance}
              end,
@@ -37,17 +37,62 @@ handle_cast({deposit, {Name, Amount}}, State = #state{db = Db}) ->
   case maps:find(Name, Db) of
     error ->
       NewDb = Db#{Name => Amount},
-      {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}};
+      {ok, Amount};
     {ok, Balance} ->
       NewDb = Db#{Name => Amount + Balance},
-      {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}}
+      {ok, Amount + Balance}
+  end, {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}};
+handle_cast({withdraw, {Name, Amount}}, State = #state{db = Db}) ->
+  case maps:find(Name, Db) of
+    error ->
+      no_account;
+    {ok, Balance} ->
+      case (Amount - Balance) < 0 of
+        true ->
+          insufficient_funds,
+          {noreply, State#state{db = db}, {continue, {deposit, Name, Amount}}};
+        false ->
+          NewDb = Db#{Name => Balance - Amount},
+          {ok, Amount + Balance},
+          {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}}
+      end
+  end;
+
+handle_cast({lend, {From, To, Amount}}, State = #state{db = Db}) ->
+  case maps:find(From, Db) of
+    error ->
+      {no_account, From};
+    {ok, FromBalance} ->
+      case maps:find(To, Db) of
+        error ->
+          {no_account, To};
+        {ok, ToBalance} ->
+          case (Amount - FromBalance) < 0 of
+            true ->
+              insufficient_funds,
+              {noreply, State#state{db = db}, {continue, {lend, From, To, Amount}}};
+            false ->
+              NewDb = Db#{To => ToBalance + Amount, From => FromBalance - Amount},
+              ok,
+              {noreply, State#state{db = NewDb}, {continue, {lend, From, To, Amount}}}
+          end
+      end
+
   end.
 
+
+
 handle_continue({balance, Name}, State) ->
-  io:format("Server got a request balance"),
+  io:format("Server got a requested get balance from ~p \n", [Name]),
   {noreply, State};
 handle_continue({deposit, Name, Amount}, State) ->
-  io:format("Server was requested deposit "),
+  io:format("Server was requested to deposit ~p to ~p \n", [Amount, Name]),
+  {noreply, State};
+handle_continue({withdraw, Name, Amount}, State) ->
+  io:format("Server was requested  withdraw ~p to ~p \n", [Amount, Name]),
+  {noreply, State};
+handle_continue({lend, From, To, Amount}, State) ->
+  io:format("Server was requested  lend From ~p to ~p the amount: ~p \n", [From, To, Amount]),
   {noreply, State}.
 
 
@@ -64,5 +109,9 @@ balance(Bank, Name) when is_pid(Bank) ->
 
 deposit(Bank, Name, Amount) when is_pid(Bank) ->
   gen_server:cast(Bank, {deposit, {Name, Amount}}).
+withdraw(Bank, Name, Amount) when is_pid(Bank) ->
+  gen_server:cast(Bank, {withdraw, {Name, Amount}}).
+lend(Bank, From, To, Amount) when is_pid(Bank) ->
+  gen_server:cast(Bank, {lend, {From, To, Amount}}).
 
 
