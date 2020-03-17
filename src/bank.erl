@@ -34,10 +34,14 @@ handle_call({balance, Name}, _From, State = #state{db = Db, num_requests = NumRe
 handle_call(num_requests, _From, State = #state{num_requests = NumReq}) ->
   {reply, NumReq, State}.
 handle_cast({deposit, {Name, Amount}}, State = #state{db = Db}) ->
-  NewDb = Db#{Name => Amount},
-  {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}}.
-
-
+  case maps:find(Name, Db) of
+    error ->
+      NewDb = Db#{Name => Amount},
+      {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}};
+    {ok, Balance} ->
+      NewDb = Db#{Name => Amount + Balance},
+      {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}}
+  end.
 
 handle_continue({balance, Name}, State) ->
   io:format("Server got a request balance"),
@@ -47,8 +51,8 @@ handle_continue({deposit, Name, Amount}, State) ->
   {noreply, State}.
 
 
-handle_info(timeout, State=#state{db=Db}) ->
-  {noreply, State#state{db=Db#{timeout => "We had a timeout"}}};
+handle_info(timeout, State = #state{db = Db}) ->
+  {noreply, State#state{db = Db#{timeout => "We had a timeout"}}};
 handle_info(_Info, State) ->
   {noreply, State}.
 
