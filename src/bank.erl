@@ -23,62 +23,61 @@ server() ->
 init(_Args) ->
   {ok, #state{}, 5000}.
 
-handle_call({balance, Name}, _From, State = #state{db = Db, num_requests = NumReq}) ->
+handle_call({balance, Name}, _From, State = #state{db = Db}) ->
   Response = case maps:find(Name, Db) of
                error ->
                  no_account;
                {ok, Balance} ->
                  {ok, Balance}
              end,
-  {reply, Response, State#state{db = Db, num_requests = NumReq + 1}, {continue, {balance, Name}}};
-handle_call(num_requests, _From, State = #state{num_requests = NumReq}) ->
-  {reply, NumReq, State}.
-handle_call({deposit, {Name, Amount}}, State = #state{db = Db}) ->
-  case maps:find(Name, Db) of
-    error ->
-      NewDb = Db#{Name => Amount},
-      {ok, Amount};
-    {ok, Balance} ->
-      NewDb = Db#{Name => Amount + Balance},
-      {ok, Amount + Balance}
-  end, {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}};
-handle_call({withdraw, {Name, Amount}}, State = #state{db = Db}) ->
-  case maps:find(Name, Db) of
-    error ->
-      no_account;
-    {ok, Balance} ->
-      case (Amount - Balance) < 0 of
-        true ->
-          insufficient_funds,
-          {noreply, State#state{db = db}, {continue, {deposit, Name, Amount}}};
-        false ->
-          NewDb = Db#{Name => Balance - Amount},
-          {ok, Amount + Balance},
-          {noreply, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}}
-      end
-  end;
+  {reply, Response, State#state{db = Db}, {continue, {balance, Name}}};
+handle_call({deposit, {Name, Amount}}, _From,  State = #state{db = Db}) ->
+  Response = case maps:find(Name, Db) of
+               error ->
+                 NewDb = Db#{Name => Amount},
+                 {ok, Amount};
+               {ok, Balance} ->
+                 NewDb = Db#{Name => Amount + Balance},
+                 {ok, Amount + Balance}
+             end, {reply, Response, State#state{db = NewDb}, {continue, {deposit, Name, Amount}}};
+handle_call({withdraw, {Name, Amount}}, _From, State = #state{db = Db}) ->
+  NewDb = Db,
+  Response = case maps:find(Name, Db) of
+               error ->
+                 no_account;
+               {ok, Balance} ->
+                 case (Amount - Balance) < 0 of
+                   true ->
+                     insufficient_funds;
+                   false ->
+                     NewDb = Db#{Name => Balance - Amount},
+                     {ok, Amount + Balance}
+                 end
+             end, {reply, Response, State#state{db = NewDb}, {continue, {withdraw, Name, Amount}}};
 
-handle_call({lend, {From, To, Amount}}, State = #state{db = Db}) ->
-  case maps:find(From, Db) of
-    error ->
-      {no_account, From};
-    {ok, FromBalance} ->
-      case maps:find(To, Db) of
-        error ->
-          {no_account, To};
-        {ok, ToBalance} ->
-          case (Amount - FromBalance) < 0 of
-            true ->
-              insufficient_funds,
-              {noreply, State#state{db = db}, {continue, {lend, From, To, Amount}}};
-            false ->
-              NewDb = Db#{To => ToBalance + Amount, From => FromBalance - Amount},
-              ok,
-              {noreply, State#state{db = NewDb}, {continue, {lend, From, To, Amount}}}
-          end
-      end
+handle_call({lend, {From, To, Amount}}, _From, State = #state{db = Db}) ->
+  NewDb = Db,
+  Response = case maps:find(From, Db) of
+               error ->
+                 {no_account, From};
+               {ok, FromBalance} ->
+                 case maps:find(To, Db) of
+                   error ->
+                     {no_account, To};
 
-  end.
+                   {ok, ToBalance} ->
+                     case (FromBalance - Amount) < 0 of
+                       true ->
+                         insufficient_funds;
+                       false ->
+                         NewDb = Db#{To => ToBalance + Amount},
+                         NewDb = NewDb#{From => FromBalance - Amount},
+                         ok
+                     end
+                 end
+
+             end, {reply, Response, State#state{db = NewDb}, {continue, {lend, From, To, Amount}}}.
+
 
 
 
@@ -106,7 +105,6 @@ handle_info(_Info, State) ->
 
 balance(Bank, Name) when is_pid(Bank) ->
   gen_server:call(Bank, {balance, Name}).
-
 deposit(Bank, Name, Amount) when is_pid(Bank) ->
   gen_server:call(Bank, {deposit, {Name, Amount}}).
 withdraw(Bank, Name, Amount) when is_pid(Bank) ->
