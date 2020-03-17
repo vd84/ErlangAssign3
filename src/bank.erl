@@ -14,9 +14,9 @@
 
 
 %% API
--export([init/1, handle_call/3, server/0, balance/2, deposit/3, handle_continue/2, handle_info/2, withdraw/3, lend/4]).
+-export([init/1, handle_call/3, start/0, balance/2, deposit/3, handle_continue/2, handle_info/2, withdraw/3, lend/4, handle_cast/2]).
 
-server() ->
+start() ->
   gen_server:start(?MODULE, [], []).
 
 
@@ -57,12 +57,16 @@ handle_call({withdraw, {Name, Amount}}, _From, State = #state{db = Db}) ->
 handle_call({lend, {From, To, Amount}}, _From, State = #state{db = Db}) ->
   {Response, ReturnDb} = case maps:find(From, Db) of
                error ->
-                 {no_account, From};
+                 case maps:find(To, Db) of
+                   {ok, _Balance} ->
+                     {{no_account, From}, Db};
+                   error ->
+                     {{no_account, both}, Db}
+                 end;
                {ok, FromBalance} ->
                  case maps:find(To, Db) of
                    error ->
                      {{no_account, To}, Db};
-
                    {ok, ToBalance} ->
                      case (FromBalance - Amount) < 0 of
                        true ->
@@ -75,6 +79,9 @@ handle_call({lend, {From, To, Amount}}, _From, State = #state{db = Db}) ->
                  end
 
              end, {reply, Response, State#state{db = ReturnDb}, {continue, {lend, From, To, Amount}}}.
+
+handle_cast(_,_) ->
+  ok.
 
 
 
