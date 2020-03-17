@@ -19,7 +19,6 @@
 start() ->
   gen_server:start(?MODULE, [], []).
 
-
 init(_Args) ->
   {ok, #state{}, 5000}.
 
@@ -82,9 +81,6 @@ handle_call({lend, {From, To, Amount}}, _From, State = #state{db = Db}) ->
 
 handle_cast(_,_) ->
   ok.
-
-
-
 
 handle_continue({balance, Name}, State) ->
   io:format("Server got a requested get balance from ~p \n", [Name]),
