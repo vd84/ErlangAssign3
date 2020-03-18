@@ -11,8 +11,6 @@
 -behavior(gen_server).
 -record(state, {db = #{},
   num_requests = 0}).
-
-
 %% API
 -export([init/1, handle_call/3, start/0, balance/2, deposit/3, handle_continue/2, handle_info/2, withdraw/3, lend/4, handle_cast/2]).
 
@@ -29,7 +27,7 @@ handle_call({balance, Name}, _From, State = #state{db = Db}) ->
                {ok, Balance} ->
                  {ok, Balance}
              end,
-  {reply, Response, State#state{db = Db}, {continue, {balance, Name}}};
+  {reply, Response, State#state{db = Db}};
 handle_call({deposit, {Name, Amount}}, _From,  State = #state{db = Db}) ->
   {Response, ReturnDb} = case maps:find(Name, Db) of
                error ->
@@ -38,7 +36,7 @@ handle_call({deposit, {Name, Amount}}, _From,  State = #state{db = Db}) ->
                {ok, Balance} ->
                  NewDb = Db#{Name => Amount + Balance},
                  {{ok, Amount + Balance}, NewDb}
-             end, {reply, Response, State#state{db = ReturnDb}, {continue, {deposit, Name, Amount}}};
+             end, {reply, Response, State#state{db = ReturnDb}};
 handle_call({withdraw, {Name, Amount}}, _From, State = #state{db = Db}) ->
   {Response, ReturnDb} = case maps:find(Name, Db) of
                error ->
@@ -51,7 +49,7 @@ handle_call({withdraw, {Name, Amount}}, _From, State = #state{db = Db}) ->
                      NewDb = Db#{Name => Balance - Amount},
                      {{ok, Amount + Balance}, NewDb}
                  end
-             end, {reply, Response, State#state{db = ReturnDb}, {continue, {withdraw, Name, Amount}}};
+             end, {reply, Response, State#state{db = ReturnDb}};
 
 handle_call({lend, {From, To, Amount}}, _From, State = #state{db = Db}) ->
   {Response, ReturnDb} = case maps:find(From, Db) of
@@ -77,22 +75,18 @@ handle_call({lend, {From, To, Amount}}, _From, State = #state{db = Db}) ->
                      end
                  end
 
-             end, {reply, Response, State#state{db = ReturnDb}, {continue, {lend, From, To, Amount}}}.
+             end, {reply, Response, State#state{db = ReturnDb}}.
 
 handle_cast(_,_) ->
   ok.
 
-handle_continue({balance, Name}, State) ->
-  io:format("Server got a requested get balance from ~p \n", [Name]),
+handle_continue({balance}, State) ->
   {noreply, State};
-handle_continue({deposit, Name, Amount}, State) ->
-  io:format("Server was requested to deposit ~p to ~p \n", [Amount, Name]),
+handle_continue({deposit}, State) ->
   {noreply, State};
-handle_continue({withdraw, Name, Amount}, State) ->
-  io:format("Server was requested  withdraw ~p to ~p \n", [Amount, Name]),
+handle_continue({withdraw}, State) ->
   {noreply, State};
-handle_continue({lend, From, To, Amount}, State) ->
-  io:format("Server was requested  lend From ~p to ~p the amount: ~p \n", [From, To, Amount]),
+handle_continue({lend}, State) ->
   {noreply, State}.
 
 
@@ -100,8 +94,6 @@ handle_info(timeout, State = #state{db = Db}) ->
   {noreply, State#state{db = Db#{timeout => "We had a timeout"}}};
 handle_info(_Info, State) ->
   {noreply, State}.
-
-
 
 
 balance(Bank, Name) when is_pid(Bank) ->
@@ -112,5 +104,3 @@ withdraw(Bank, Name, Amount) when is_pid(Bank) ->
   gen_server:call(Bank, {withdraw, {Name, Amount}}).
 lend(Bank, From, To, Amount) when is_pid(Bank) ->
   gen_server:call(Bank, {lend, {From, To, Amount}}).
-
-
